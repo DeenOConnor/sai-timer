@@ -213,9 +213,9 @@ void threadedFunction() {
             long hours = mints / 60;
             long minutes = mints % 60;
 
-            string timeStr = format!"%02d:%02d:%02d"(hours, minutes, seconds);
+            auto timeStr = format!"%02d:%02d:%02d"d(hours, minutes, seconds);
 
-            timerText.text(to!dstring(timeStr));
+            timerText.text(timeStr);
         }
 
         // To prevent data corruption it might be a good idea to zero out variables before next use
