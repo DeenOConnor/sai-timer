@@ -1,7 +1,7 @@
 # sai-timer
 A small and simple program to measure time spent in SAI and/or SAI2
 
-This was made on request, and i'm not planning on updating this unless there's a random event that will attract significant amounts of people to this program.
+This was made on request, and i'm not planning on updating this unless there's a bug/feature i'm explicitly asked to deal with, or a random event that will attract significant amounts of people to this program.
 
 
 # Build
