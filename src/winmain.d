@@ -67,7 +67,7 @@ extern (C) int UIAppMain(string[] args) {
     h1Layout.addChild(textText);
 
     timerText = new TextWidget();
-    timerText.text("0:0:0");
+    timerText.text("00:00:00");
     timerText.textColor("black");
     timerText.fontSize(20);
     timerText.fontWeight(600);
@@ -150,7 +150,7 @@ extern (C) int UIAppMain(string[] args) {
             sw.stop();
         }
         sw.reset();
-        timerText.text(to!dstring("0:0:0"));
+        timerText.text(to!dstring("00:00:00"));
 
         return true;
     };
@@ -213,7 +213,7 @@ void threadedFunction() {
             long hours = mints / 60;
             long minutes = mints % 60;
 
-            string timeStr = format!"%d:%d:%d"(hours, minutes, seconds);
+            string timeStr = format!"%02d:%02d:%02d"(hours, minutes, seconds);
 
             timerText.text(to!dstring(timeStr));
         }
