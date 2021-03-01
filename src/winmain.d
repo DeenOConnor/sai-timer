@@ -77,7 +77,7 @@ extern (C) int UIAppMain(string[] args) {
     auto h2Layout = new HorizontalLayout();
     h2Layout.margins(5);
     vLayout.addChild(h2Layout);
-    
+
     btnStart = new Button();
     btnStart.text("Start");
     btnStart.enabled(false);
@@ -95,7 +95,7 @@ extern (C) int UIAppMain(string[] args) {
 
     auto h3Layout = new HorizontalLayout();
     vLayout.addChild(h3Layout);
-    
+
     auto h4Layout = new HorizontalLayout();
     h4Layout.margins(Rect(0, 40, 0, 0));
     vLayout.addChild(h4Layout);
@@ -230,43 +230,65 @@ void threadedFunction() {
 
 // Threaded subroutine that performs a simultaneous search for either of SAI versions
 GameProcess findSai() {
+    GameProcess result;
+
     // We don't need to do any shenanigans with the memory, so we disregard modules completely
     string[] modules = [""];
-    GameProcess sai1 = new GameProcess("sai.exe", "", modules);
-    GameProcess sai2 = new GameProcess("sai2.exe", "", modules);
+    GameProcess sai1 = new GameProcess("sai.exe", "", modules, "SAI 1");
+    GameProcess sai2 = new GameProcess("sai2.exe", "", modules, "SAI 2");
+    GameProcess krita = new GameProcess("krita.exe", "", modules, "Krita");
+    GameProcess medibang = new GameProcess("MediBangPaintPro.exe", "", modules, "MediBang");
 
-    // Two threads looking for SAI 1 and 2 respectively
-    Thread findSai1, findSai2;
+    // Threads looking for programs
+    Thread findSai1, findSai2, findKrita, findMedibang;
     findSai1 = new Thread({
         sai1.runOnProcess(false);
     });
     findSai2 = new Thread({
         sai2.runOnProcess(false);
     });
+    findKrita = new Thread({
+        krita.runOnProcess(false);
+    });
+    findMedibang = new Thread({
+        medibang.runOnProcess(false);
+    });
 
     findSai1.start();
     findSai2.start();
+    findKrita.start();
+    findMedibang.start();
+
+    // Constructing an array of workers, that will represent the programs they are looking for
+    auto workers = [
+        sai1 : findSai1,
+        sai2 : findSai2,
+        krita : findKrita,
+        medibang : findMedibang
+    ];
+    bool foundProgram = false;
 
     // If either of the two threads finished, sai.exe or sai2.exe has been found
     while(true) {
-        if (shutdown) {
-            sai1.forceStop = true;
-            sai2.forceStop = true;
-            findSai1.join();
-            findSai2.join();
-            return new GameProcess("sai.exe", "", modules);
+        foreach (obj, worker; workers) {
+            if (!worker.isRunning()) {
+                foundProgram = true;
+                errorText.text("Found "d ~ to!dstring(obj.programName));
+                result = obj;
+            } else if (shutdown || foundProgram) {
+                obj.forceStop = true;
+                if (shutdown) {
+                    result = new GameProcess("sai.exe", "", modules);
+                    worker.join();
+                }
+            }
         }
-        if (!findSai1.isRunning()) {
-            sai2.forceStop = true;
-            errorText.text("Found SAI 1");
-            return sai1;
-        }
-        if (!findSai2.isRunning()) {
-            sai1.forceStop = true;
-            errorText.text("Found SAI 2");
-            return sai2;
+        if (shutdown || foundProgram) {
+            break;
         }
     }
+
+    return result;
 }
 
 // Monitoring subroutine that checks the presence of the process
