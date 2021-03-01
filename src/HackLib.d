@@ -30,10 +30,14 @@ class GameProcess {
     private wstring targetProcessName;
     private wstring targetWindowName;
 
-    this(string targetProcName, string targetWindName, string[] modules) {
+    public string programName = "";
+
+    this(string targetProcName, string targetWindName, string[] modules, string name = "") {
         this.targetProcessName = wtext(targetProcName); 
         this.targetWindowName = wtext(targetWindName);
+        this.programName = name;
 
+        // Creating entries for all the modules we want to find in the process
         foreach (string mod; modules) { 
             if (mod != "") {
                 processModules[mod] = null;
