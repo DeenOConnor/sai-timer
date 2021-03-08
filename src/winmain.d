@@ -16,6 +16,7 @@ import core.thread;
 import core.time : dur, Duration;
 import core.sys.windows.windows;
 import core.sys.windows.winuser;
+import core.stdc.stdlib : exit;
 
 // GUI library imports
 import dlangui;
@@ -36,6 +37,7 @@ public static __gshared GameProcess sai;
 
 public static __gshared TextWidget timerText;
 public static __gshared TextWidget errorText;
+public static __gshared TextWidget textText;
 
 public static __gshared Button btnStart;
 public static __gshared Button btnStop;
@@ -45,6 +47,9 @@ mixin APP_ENTRY_POINT;
 
 extern (C) int UIAppMain(string[] args) {
     Thread timerThread = new Thread(&threadedFunction);
+    Thread monitorThread = new Thread({
+        monitor();
+    });
 
     Window window = Platform.instance.createWindow("SAI Timer", null, 0, 200, 150);
     window.backgroundColor(15790320);
@@ -58,7 +63,7 @@ extern (C) int UIAppMain(string[] args) {
     auto h1Layout = new HorizontalLayout();
     vLayout.addChild(h1Layout);
 
-    auto textText = new TextWidget();
+    textText = new TextWidget();
     textText.text("SAI Active: ");
     textText.textColor("black");
     textText.fontSize(20);
@@ -162,7 +167,11 @@ extern (C) int UIAppMain(string[] args) {
         if (timerThread.isRunning()) {
             timerThread.join();
         }
+        if (monitorThread.isRunning()) {
+            monitorThread.join();
+        }
         Thread.sleep(dur!"seconds"(1));
+        exit(0);
     };
 
     window.mainWidget = vLayout;
@@ -170,19 +179,11 @@ extern (C) int UIAppMain(string[] args) {
 
     // Code that looks for either SAI or SAI2 to appear
     new Thread({
-        isLookupThreadActive = true;
-        //toFile("1", "debug.log");
-        sai = findSai();
-        btnStart.enabled(true);
-        btnStop.enabled(true);
-        btnReset.enabled(true);
-        isLookupThreadActive = false;
+        lookForSai();
     }).start();
 
     // Starting monitoring thread, in case SAI exits or crashes it will look for it again
-    new Thread({
-        monitor();
-    }).start();
+    monitorThread.start();
 
     return Platform.instance.enterMessageLoop();
 }
@@ -225,6 +226,17 @@ void threadedFunction() {
 
         // This reduces speed, while also reducing the amount of winapi calls
         Thread.sleep(dur!"msecs"(5));
+    }
+}
+
+void lookForSai() {
+    if (!isLookupThreadActive) {
+        isLookupThreadActive = true;
+        sai = findSai();
+        btnStart.enabled(true);
+        btnStop.enabled(true);
+        btnReset.enabled(true);
+        isLookupThreadActive = false;
     }
 }
 
@@ -274,6 +286,7 @@ GameProcess findSai() {
             if (!worker.isRunning()) {
                 foundProgram = true;
                 errorText.text("Found "d ~ to!dstring(obj.programName));
+                textText.text(to!dstring(obj.programName) ~ "Active: "d);
                 result = obj;
             } else if (shutdown || foundProgram) {
                 obj.forceStop = true;
@@ -286,6 +299,7 @@ GameProcess findSai() {
         if (shutdown || foundProgram) {
             break;
         }
+
     }
 
     return result;
@@ -294,10 +308,7 @@ GameProcess findSai() {
 // Monitoring subroutine that checks the presence of the process
 void monitor() {
     uint exitCode = 0;
-    while(true) {
-        if (shutdown) {
-            break;
-        }
+    while(!shutdown) {
 
         if (isLookupThreadActive) {
             // If a thread is already looking for a process, we want to let it run
@@ -317,7 +328,7 @@ void monitor() {
                 // STILL_ACTIVE code, it means that the process hasn't yet completed
                 if (exitCode != 0x103) {
                     // Buttons are blocked because we don't need unnecessary input
-                    errorText.text("SAI process dead");
+                    errorText.text(to!dstring(sai.programName) ~ " process dead"d);
                     if (sw.running()){
                         sw.stop();
                     }
@@ -329,12 +340,7 @@ void monitor() {
                     // Launching the same thread template to find new SAI window
                     if (!isLookupThreadActive) {
                         Thread lookupThread = new Thread({
-                            isLookupThreadActive = true;
-                            sai = findSai();
-                            btnStart.enabled(true);
-                            btnStop.enabled(true);
-                            btnReset.enabled(true);
-                            isLookupThreadActive = false;
+                            lookForSai();
                         });
                         lookupThread.start();
                         lookupThread.join();
