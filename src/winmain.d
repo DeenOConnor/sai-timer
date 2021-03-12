@@ -208,16 +208,17 @@ void threadedFunction() {
             if (sw.running()) {
                 sw.stop();
             }
-            auto time = sw.peek().total!"seconds";
-            long seconds = time % 60;
-            long mints = time / 60;
-            long hours = mints / 60;
-            long minutes = mints % 60;
-
-            auto timeStr = format!"%02d:%02d:%02d"d(hours, minutes, seconds);
-
-            timerText.text(timeStr);
         }
+
+        auto time = sw.peek().total!"seconds";
+        long seconds = time % 60;
+        long mints = time / 60;
+        long hours = mints / 60;
+        long minutes = mints % 60;
+
+        auto timeStr = format!"%02d:%02d:%02d"d(hours, minutes, seconds);
+
+        timerText.text(timeStr);
 
         // To prevent data corruption it might be a good idea to zero out variables before next use
         fgWnd = null;
@@ -250,9 +251,10 @@ GameProcess findSai() {
     GameProcess sai2 = new GameProcess("sai2.exe", "", modules, "SAI 2");
     GameProcess krita = new GameProcess("krita.exe", "", modules, "Krita");
     GameProcess medibang = new GameProcess("MediBangPaintPro.exe", "", modules, "MediBang");
+    GameProcess clip = new GameProcess("CLIPStudioPaint.exe", "", modules, "ClipStudio");
 
     // Threads looking for programs
-    Thread findSai1, findSai2, findKrita, findMedibang;
+    Thread findSai1, findSai2, findKrita, findMedibang, findClipStudio;
     findSai1 = new Thread({
         sai1.runOnProcess(false);
     });
@@ -265,18 +267,23 @@ GameProcess findSai() {
     findMedibang = new Thread({
         medibang.runOnProcess(false);
     });
+    findClipStudio = new Thread({
+        clip.runOnProcess(false);
+    });
 
     findSai1.start();
     findSai2.start();
     findKrita.start();
     findMedibang.start();
+    findClipStudio.start();
 
     // Constructing an array of workers, that will represent the programs they are looking for
     auto workers = [
         sai1 : findSai1,
         sai2 : findSai2,
         krita : findKrita,
-        medibang : findMedibang
+        medibang : findMedibang,
+        clip : findClipStudio
     ];
     bool foundProgram = false;
 
