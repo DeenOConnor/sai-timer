@@ -12,3 +12,5 @@ To build this, you need to add DLangUI to your project.
 You can do this in dub.json by pasting the following line in your "dependencies" section:
 
 `"dlangui": "~>0.9.186"`
+
+MAJOR NOTICE: for a while i kept using DMD 2.090.0 as my dub compiler. Recently i updated it to 2.097.2 and for some reason DLangUI isn't compiling anymore. It just gives you a shit ton of deprecation errors and then fails. So, if any single person in this universe really wants to compile this mess, and you fail, try older compiler versions.
