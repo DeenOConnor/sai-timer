@@ -39,19 +39,20 @@ public static __gshared TextWidget timerText;
 public static __gshared TextWidget errorText;
 public static __gshared TextWidget textText;
 
-public static __gshared Button btnStart;
-public static __gshared Button btnStop;
+public static __gshared SwitchButton btnStartStop;
 public static __gshared Button btnReset;
+
+Thread timerThread;
 
 mixin APP_ENTRY_POINT;
 
 extern (C) int UIAppMain(string[] args) {
-    Thread timerThread = new Thread(&threadedFunction);
+    timerThread = new Thread(&threadedFunction);
     Thread monitorThread = new Thread({
         monitor();
     });
 
-    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 200, 150);
+    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 215, 160);
     window.backgroundColor(15790320);
 
     // UI components initialization and placement
@@ -83,15 +84,9 @@ extern (C) int UIAppMain(string[] args) {
     h2Layout.margins(5);
     vLayout.addChild(h2Layout);
 
-    btnStart = new Button();
-    btnStart.text("Start");
-    btnStart.enabled(false);
-    h2Layout.addChild(btnStart);
-
-    btnStop = new Button();
-    btnStop.text("Stop");
-    btnStop.enabled(false);
-    h2Layout.addChild(btnStop);
+    btnStartStop = new SwitchButton();
+    btnStartStop.enabled(false);
+    h2Layout.addChild(btnStartStop);
 
     btnReset = new Button();
     btnReset.text("Reset");
@@ -114,37 +109,39 @@ extern (C) int UIAppMain(string[] args) {
     h4Layout.addChild(errorText);
 
     // Button logic
-    btnStart.click = delegate(Widget w) {
+    auto startClick = function(Widget w) {
         if (timerThread.isRunning()) {
-            return true;
+            if (sw.running()) {
+                sw.stop();
+            }
+            try {
+                runFlag = true;
+                timerThread.start();
+            } catch (Exception ex) {
+                errorText.text(to!dstring(ex.msg));
+            }
         }
-
-        if (sw.running()) {
-            sw.stop();
-        }
-        try {
-            runFlag = true;
-            timerThread.start();
-        } catch (Exception ex) {
-            errorText.text(to!dstring(ex.msg));
-        }
-
-        return true;
     };
 
-    btnStop.click = delegate(Widget w) {
-        if (!timerThread.isRunning()) {
-            return true;
-        }
+    auto stopClick = function(Widget w) {
+        if (timerThread.isRunning()) {
+            if (sw.running()) {
+                sw.stop();
+            }
 
-        if (sw.running()) {
-            sw.stop();
+            runFlag = false;
+            timerThread.join();
+            if (timerThread.isRunning) {
+                writeln("WTF, finished thread is running!");
+            }
         }
+    };
 
-        runFlag = false;
-        timerThread.join();
-        if (timerThread.isRunning) {
-            writeln("WTF, finished thread is running!");
+    btnStartStop.click = delegate(Widget w) {
+        if (w.checked) {
+            startClick(w);
+        } else {
+            stopClick(w);
         }
 
         return true;
@@ -234,8 +231,7 @@ void lookForSai() {
     if (!isLookupThreadActive) {
         isLookupThreadActive = true;
         sai = findSai();
-        btnStart.enabled(true);
-        btnStop.enabled(true);
+        btnStartStop.enabled(true);
         btnReset.enabled(true);
         isLookupThreadActive = false;
     }
@@ -293,7 +289,7 @@ GameProcess findSai() {
             if (!worker.isRunning()) {
                 foundProgram = true;
                 errorText.text("Found "d ~ to!dstring(obj.programName));
-                textText.text(to!dstring(obj.programName) ~ "Active: "d);
+                textText.text(to!dstring(obj.programName) ~ " Active: "d);
                 result = obj;
             } else if (shutdown || foundProgram) {
                 obj.forceStop = true;
@@ -340,8 +336,7 @@ void monitor() {
                         sw.stop();
                     }
                     //However, we don't want to terminate the timer thread, because it has to react to new data
-                    btnStart.enabled(false);
-                    btnStop.enabled(false);
+                    btnStartStop.enabled(false);
                     btnReset.enabled(false);
 
                     // Launching the same thread template to find new SAI window
