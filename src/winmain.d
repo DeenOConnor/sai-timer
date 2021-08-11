@@ -110,7 +110,7 @@ extern (C) int UIAppMain(string[] args) {
 
     // Button logic
     auto startClick = function(Widget w) {
-        if (timerThread.isRunning()) {
+        if (!timerThread.isRunning()) {
             if (sw.running()) {
                 sw.stop();
             }
