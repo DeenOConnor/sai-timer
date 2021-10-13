@@ -1,5 +1,5 @@
 # sai-timer
-A small and simple program to measure time spent in SAI, SAI2, Krita, ClipStudio or MediBangPaintPro.
+A small and simple program to measure time spent in SAI, SAI2, Krita, ClipStudio, MediBangPaintPro or Blender.
 
 This was made on request, updated on request, and i'm still not planning on updating this unless there's a bug/feature i'm explicitly asked to deal with, or a random event that will attract significant amounts of people to this program. In case of that, i'll probably bother myself with adding some cosmetic features and maybe properly design the UI.
 
