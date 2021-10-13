@@ -52,7 +52,7 @@ extern (C) int UIAppMain(string[] args) {
         monitor();
     });
 
-    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 215, 160);
+    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 225, 160);
     window.backgroundColor(15790320);
 
     // UI components initialization and placement
@@ -237,53 +237,35 @@ void lookForSai() {
     }
 }
 
-// Threaded subroutine that performs a simultaneous search for either of SAI versions
+// Threaded subroutine that performs a simultaneous search for all supported programs
 GameProcess findSai() {
     GameProcess result;
 
     // We don't need to do any shenanigans with the memory, so we disregard modules completely
     string[] modules = [""];
-    GameProcess sai1 = new GameProcess("sai.exe", "", modules, "SAI 1");
-    GameProcess sai2 = new GameProcess("sai2.exe", "", modules, "SAI 2");
-    GameProcess krita = new GameProcess("krita.exe", "", modules, "Krita");
-    GameProcess medibang = new GameProcess("MediBangPaintPro.exe", "", modules, "MediBang");
-    GameProcess clip = new GameProcess("CLIPStudioPaint.exe", "", modules, "ClipStudio");
 
-    // Threads looking for programs
-    Thread findSai1, findSai2, findKrita, findMedibang, findClipStudio;
-    findSai1 = new Thread({
-        sai1.runOnProcess(false);
-    });
-    findSai2 = new Thread({
-        sai2.runOnProcess(false);
-    });
-    findKrita = new Thread({
-        krita.runOnProcess(false);
-    });
-    findMedibang = new Thread({
-        medibang.runOnProcess(false);
-    });
-    findClipStudio = new Thread({
-        clip.runOnProcess(false);
-    });
-
-    findSai1.start();
-    findSai2.start();
-    findKrita.start();
-    findMedibang.start();
-    findClipStudio.start();
-
-    // Constructing an array of workers, that will represent the programs they are looking for
-    auto workers = [
-        sai1 : findSai1,
-        sai2 : findSai2,
-        krita : findKrita,
-        medibang : findMedibang,
-        clip : findClipStudio
+    // A complete rethink of the previous code towards a more flexible and "dynamic" approach
+    string[string] programs = [
+        "sai.exe" : "SAI 1",
+        "sai2.exe" : "SAI 2",
+        "krita.exe" : "Krita",
+        "MediBangPaintPro.exe" : "MediBang",
+        "CLIPStudioPaint.exe" : "ClipStudio",
+        "blender.exe" : "Blender",
     ];
+    Thread[GameProcess] workers;
+    foreach (exe, name; programs) {
+        GameProcess gp = new GameProcess(exe, "", modules, name);
+        Thread findThread = new Thread({
+            gp.runOnProcess(false);
+        });
+        workers[gp] = findThread;
+        findThread.start();
+    }
+
     bool foundProgram = false;
 
-    // If either of the two threads finished, sai.exe or sai2.exe has been found
+    // If one of the threads has finished, it means a supported program executable has been found
     while(true) {
         foreach (obj, worker; workers) {
             if (!worker.isRunning()) {
@@ -291,15 +273,21 @@ GameProcess findSai() {
                 errorText.text("Found "d ~ to!dstring(obj.programName));
                 textText.text(to!dstring(obj.programName) ~ " Active: "d);
                 result = obj;
-            } else if (shutdown || foundProgram) {
+                break;
+            } else if (shutdown) {
+                result = new GameProcess("sai.exe", "", modules);
                 obj.forceStop = true;
-                if (shutdown) {
-                    result = new GameProcess("sai.exe", "", modules);
-                    worker.join();
-                }
+                worker.join();
+                break;
             }
         }
+
+        // In both cases make sure ALL workers are stopped and none are left running in the background
         if (shutdown || foundProgram) {
+            foreach (obj, worker; workers) {
+                obj.forceStop = true;
+                worker.join();
+            }
             break;
         }
 
@@ -315,7 +303,7 @@ void monitor() {
 
         if (isLookupThreadActive) {
             // If a thread is already looking for a process, we want to let it run
-            Thread.sleep(dur!"msecs"(5));
+            Thread.sleep(dur!"msecs"(15));
             continue;
         }
 
@@ -352,6 +340,6 @@ void monitor() {
             }
             exitCode = 0;
         }
-        Thread.sleep(dur!"msecs"(5));
+        Thread.sleep(dur!"msecs"(15));
     }
 }
