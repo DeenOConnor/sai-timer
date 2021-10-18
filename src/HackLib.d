@@ -14,7 +14,9 @@ import core.stdc.string;
 import std.string;
 import std.conv;
 import std.stdio;
-import core.stdc.stdlib;
+import std.regex;
+import core.thread;
+import core.time : dur;
 
 class GameProcess {
 
@@ -55,7 +57,6 @@ class GameProcess {
             if (code == 5) {
                 writeln("System reported NotEnoughPrivileges, please run the hack as administrator!");
                 readln();
-                exit(code);
             }
             return 0;
         }
@@ -89,6 +90,43 @@ class GameProcess {
         return 0;
     }
 
+    private static wstring findProcessNameByRegex(wstring regexp) {
+        PROCESSENTRY32 procEntry;
+        procEntry.dwSize = PROCESSENTRY32.sizeof;
+
+        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnapshot == INVALID_HANDLE_VALUE) {
+            int code = GetLastError();
+            if (code == 5) {
+                writeln("System reported NotEnoughPrivileges, please run the hack as administrator!");
+                readln();
+            }
+            return ""w;
+        }
+
+        if (!Process32First(hSnapshot, &procEntry)) {
+            CloseHandle(hSnapshot);
+            return ""w;
+        }
+
+        do {
+            wstring exeFile = ""w;
+            foreach (wchar single; procEntry.szExeFile) { 
+                if (single != 0) {
+                    exeFile ~= single;
+                } else break;
+            }
+            auto rexp = regex(regexp);
+            auto capture = matchFirst(exeFile, rexp);
+            if (!capture.empty) {
+                return exeFile;
+            }
+        }  while (Process32Next(hSnapshot, &procEntry));
+
+        CloseHandle(hSnapshot);
+        return ""w;
+    }
+
     private uint getThreadByProcess(uint processId) {
         THREADENTRY32 threadEntry;
         threadEntry.dwSize = THREADENTRY32.sizeof;
@@ -99,7 +137,6 @@ class GameProcess {
             if (code == 5) {
                 writeln("System reported NotEnoughPrivileges, please run the hack as administrator!");
                 readln();
-                exit(code);
             }
             return 0;
         }
@@ -128,7 +165,6 @@ class GameProcess {
             if (code == 5) {
                 writeln("System reported NotEnoughPrivileges, please run the hack as administrator!");
                 readln();
-                exit(code);
             }
             return null;
         }
@@ -180,19 +216,30 @@ class GameProcess {
         }
     }
 
-    public void runOnProcess(bool needDebug = true) {
+    public void runOnProcess(bool needDebug = true, bool nameIsRegex = false) {
         if (needDebug) {
             this.setDebugPrivileges();
         }
+
+        if (nameIsRegex) {
+            wstring processName = "";
+            do {
+                processName = this.findProcessNameByRegex(this.targetProcessName);
+                Thread.sleep(dur!"msecs"(30));
+            } while (processName == ""w && !this.forceStop);
+            this.targetProcessName = processName;
+        }
+
         if (this.findProcessByName(this.targetProcessName, this.gameProcess) == 0) {
             writeln("Waiting for the game to appear...");
 
             while (this.findProcessByName(this.targetProcessName, this.gameProcess) == 0 && !this.forceStop) {
-                Sleep(10);
+                Thread.sleep(dur!"msecs"(30));
             }
         }
+
         while (this.getThreadByProcess(gameProcess.th32ProcessID) == 0 && !this.forceStop) {
-            Sleep(10);
+            Thread.sleep(dur!"msecs"(30));
         }
 
         if (this.forceStop) {
