@@ -11,6 +11,10 @@ import std.datetime.stopwatch;
 import std.format;
 import std.exception;
 
+// WIP: automatic update detection (std.net.curl is useless)
+// A constant that is used to determine current version
+immutable ubyte ver = 10;
+
 // System-based functions imports
 import core.thread;
 import core.time : dur, Duration;
@@ -23,6 +27,7 @@ import dlangui;
 import dlangui.platforms.common.platform;
 import dlangui.widgets.controls;
 import dlangui.widgets.styles : Align;
+import dlangui.dialogs.dialog;
 
 // Process management and info library
 import HackLib;
@@ -41,18 +46,20 @@ public static __gshared TextWidget textText;
 
 public static __gshared SwitchButton btnStartStop;
 public static __gshared Button btnReset;
+public static __gshared ImageButton btnLang;
 
 Thread timerThread;
 
 mixin APP_ENTRY_POINT;
 
 extern (C) int UIAppMain(string[] args) {
+
     timerThread = new Thread(&threadedFunction);
     Thread monitorThread = new Thread({
         monitor();
     });
 
-    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 225, 160);
+    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 250, 160);
     window.backgroundColor(15790320);
 
     // UI components initialization and placement
@@ -252,12 +259,26 @@ GameProcess findSai() {
         "MediBangPaintPro.exe" : "MediBang",
         "CLIPStudioPaint.exe" : "ClipStudio",
         "blender.exe" : "Blender",
+        "Photoshop.exe" : "Photoshop",
+    ];
+    // Programs that can have varying executable names (ex. gimp<version>.exe)
+    string[string] regexPrograms = [
+        r"gimp(-\d+\.\d+)?\.exe" : "GIMP",
     ];
     Thread[GameProcess] workers;
     foreach (exe, name; programs) {
         GameProcess gp = new GameProcess(exe, "", modules, name);
         Thread findThread = new Thread({
             gp.runOnProcess(false);
+        });
+        workers[gp] = findThread;
+        findThread.start();
+    }
+    // Separate loop for process with names we are not sure in
+    foreach (exe, name; regexPrograms) {
+        GameProcess gp = new GameProcess(exe, "", modules, name);
+        Thread findThread = new Thread({
+            gp.runOnProcess(false, true);
         });
         workers[gp] = findThread;
         findThread.start();
