@@ -5,40 +5,42 @@ module winmain;
 pragma(lib, "user32");
 
 // Standard library imports
-import std.stdio;
 import std.conv;
 import std.datetime.stopwatch;
-import std.format;
 import std.exception;
+import std.format;
+import std.regex;
+import std.stdio;
 
-// WIP: automatic update detection (std.net.curl is useless)
 // A constant that is used to determine current version
-immutable ubyte ver = 10;
+immutable ubyte ver = 11;
 
 // System-based functions imports
 import core.thread;
 import core.time : dur, Duration;
+import core.stdc.stdlib : exit;
 import core.sys.windows.windows;
 import core.sys.windows.winuser;
-import core.stdc.stdlib : exit;
 
 // GUI library imports
 import dlangui;
+import dlangui.dialogs.dialog;
 import dlangui.platforms.common.platform;
 import dlangui.widgets.controls;
 import dlangui.widgets.styles : Align;
-import dlangui.dialogs.dialog;
 
 // Process management and info library
 import HackLib;
 
 public static __gshared auto sw = StopWatch(AutoStart.no);
 
+public static shared bool isLookupThreadActive = false;
+
 public static __gshared bool runFlag = true;
-public static __gshared bool isLookupThreadActive = false;
 public static __gshared bool shutdown = false;
 
 public static __gshared GameProcess sai;
+public static __gshared Window window;
 
 public static __gshared TextWidget timerText;
 public static __gshared TextWidget errorText;
@@ -59,7 +61,7 @@ extern (C) int UIAppMain(string[] args) {
         monitor();
     });
 
-    Window window = Platform.instance.createWindow("SAI Timer", null, 0, 250, 160);
+    window = Platform.instance.createWindow("SAI Timer", null, 0, 250, 160);
     window.backgroundColor(15790320);
 
     // UI components initialization and placement
@@ -223,6 +225,7 @@ void threadedFunction() {
         auto timeStr = format!"%02d:%02d:%02d"d(hours, minutes, seconds);
 
         timerText.text(timeStr);
+        window.update();
 
         // To prevent data corruption it might be a good idea to zero out variables before next use
         fgWnd = null;
@@ -251,6 +254,7 @@ GameProcess findSai() {
     // We don't need to do any shenanigans with the memory, so we disregard modules completely
     string[] modules = [""];
 
+    
     // A complete rethink of the previous code towards a more flexible and "dynamic" approach
     string[string] programs = [
         "sai.exe" : "SAI 1",
@@ -266,34 +270,43 @@ GameProcess findSai() {
         r"gimp(-\d+\.\d+)?\.exe" : "GIMP",
     ];
     Thread[GameProcess] workers;
-    foreach (exe, name; programs) {
-        GameProcess gp = new GameProcess(exe, "", modules, name);
-        Thread findThread = new Thread({
-            gp.runOnProcess(false);
-        });
-        workers[gp] = findThread;
-        findThread.start();
-    }
-    // Separate loop for process with names we are not sure in
-    foreach (exe, name; regexPrograms) {
-        GameProcess gp = new GameProcess(exe, "", modules, name);
-        Thread findThread = new Thread({
-            gp.runOnProcess(false, true);
-        });
-        workers[gp] = findThread;
-        findThread.start();
-    }
+
+    // A big regex to find all supported programs in one go
+    string processNameRegex = r"((sai(2?))|(krita)|(MediBangPaintPro)|(CLIPStudioPaint)|(blender)|(Photoshop)|(gimp(-\d+\.\d+)?))\.exe";
+    GameProcess gp = new GameProcess(processNameRegex, "", modules);
+    Thread findThread = new Thread({
+        gp.runOnProcess(false, true);
+    });
+    workers[gp] = findThread;
+    findThread.start();
+
 
     bool foundProgram = false;
 
-    // If one of the threads has finished, it means a supported program executable has been found
+    // If the thread has finished, then something has been found
     while(true) {
         foreach (obj, worker; workers) {
             if (!worker.isRunning()) {
                 foundProgram = true;
-                errorText.text("Found "d ~ to!dstring(obj.programName));
-                textText.text(to!dstring(obj.programName) ~ " Active: "d);
-                result = obj;
+                foreach (exe, name; programs) {
+                    if (obj.getExeName() == exe) {
+                        errorText.text("Found "d ~ to!dstring(name));
+                        obj.setName(name);
+                        textText.text(to!dstring(name) ~ " Active: "d);
+                        result = obj;
+                        break;
+                    }
+                }
+                foreach (exe, name; regexPrograms) {
+                    if (matchFirst(obj.getExeName(), regex(exe))) {
+                        errorText.text("Found "d ~ to!dstring(name));
+                        obj.setName(name);
+                        textText.text(to!dstring(name) ~ " Active: "d);
+                        result = obj;
+                        break;
+                    }
+                }
+                window.update();
                 break;
             } else if (shutdown) {
                 result = new GameProcess("sai.exe", "", modules);
@@ -307,6 +320,9 @@ GameProcess findSai() {
         if (shutdown || foundProgram) {
             foreach (obj, worker; workers) {
                 obj.forceStop = true;
+            }
+            // Wait for join AFTER all workers received stop flag (prevents unnecessary delays)
+            foreach (obj, worker; workers) {
                 worker.join();
             }
             break;
@@ -341,6 +357,7 @@ void monitor() {
                 if (exitCode != 0x103) {
                     // Buttons are blocked because we don't need unnecessary input
                     errorText.text(to!dstring(sai.programName) ~ " process dead"d);
+                    window.update();
                     if (sw.running()){
                         sw.stop();
                     }
