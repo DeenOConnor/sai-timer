@@ -47,6 +47,14 @@ class GameProcess {
         }
     }
 
+    public string getExeName() {
+        return text(this.targetProcessName);
+    }
+
+    public void setName(string name) {
+        this.programName = name;
+    }
+
     private uint findProcessByName(wstring procName, PROCESSENTRY32 pEntry) {
         PROCESSENTRY32 procEntry;
         procEntry.dwSize = PROCESSENTRY32.sizeof;
