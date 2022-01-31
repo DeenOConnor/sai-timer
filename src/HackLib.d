@@ -144,7 +144,7 @@ class GameProcess {
             if (nameIsRegex) {
                 if (matchFirst(processName, regex(procName))) {
                     this.processId = processInfo.ProcessId;
-                    this.setName(text(procName));
+                    this.setName(text(processName));
                     return processInfo.ProcessId;
                 }
             } else {
