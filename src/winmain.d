@@ -11,11 +11,13 @@ import std.exception;
 import std.format;
 import std.regex;
 import std.stdio;
+import std.string;
 
 // A constant that is used to determine current version
-immutable ubyte ver = 11;
+immutable ubyte ver = 12;
 
 // System-based functions imports
+import core.memory;
 import core.thread;
 import core.time : dur, Duration;
 import core.stdc.stdlib : exit;
@@ -25,6 +27,7 @@ import core.sys.windows.winuser;
 // GUI library imports
 import dlangui;
 import dlangui.dialogs.dialog;
+import dlangui.graphics.resources;
 import dlangui.platforms.common.platform;
 import dlangui.widgets.controls;
 import dlangui.widgets.styles : Align;
@@ -55,6 +58,7 @@ Thread timerThread;
 mixin APP_ENTRY_POINT;
 
 extern (C) int UIAppMain(string[] args) {
+    embeddedResourceList.addResources(embedResourcesFromList!("resources.list")());
 
     timerThread = new Thread(&threadedFunction);
     Thread monitorThread = new Thread({
@@ -115,8 +119,18 @@ extern (C) int UIAppMain(string[] args) {
     errorText.fontSize(16);
     errorText.fontWeight(600);
     errorText.fontFace("Arial");
+    errorText.alignment(Align.Left);
+    errorText.layoutWidth(250);
     h4Layout.addChild(errorText);
 
+    auto drawBuf = drawableCache.getImage("lang-globe");
+    ImageDrawable icon = new ImageDrawable(drawBuf);
+
+    btnLang = new ImageButton();
+    btnLang.drawable = icon;
+    btnLang.margins(Rect(10, 0, 0, 0));
+    h4Layout.addChild(btnLang);
+    
     // Button logic
     auto startClick = function(Widget w) {
         if (!timerThread.isRunning()) {
@@ -183,11 +197,6 @@ extern (C) int UIAppMain(string[] args) {
     window.mainWidget = vLayout;
     window.show();
 
-    // Code that looks for either SAI or SAI2 to appear
-    new Thread({
-        lookForSai();
-    }).start();
-
     // Starting monitoring thread, in case SAI exits or crashes it will look for it again
     monitorThread.start();
 
@@ -241,6 +250,7 @@ void lookForSai() {
     if (!isLookupThreadActive) {
         isLookupThreadActive = true;
         sai = findSai();
+        GC.collect();
         btnStartStop.enabled(true);
         btnReset.enabled(true);
         isLookupThreadActive = false;
@@ -254,27 +264,14 @@ GameProcess findSai() {
     // We don't need to do any shenanigans with the memory, so we disregard modules completely
     string[] modules = [""];
 
-    
-    // A complete rethink of the previous code towards a more flexible and "dynamic" approach
-    string[string] programs = [
-        "sai.exe" : "SAI 1",
-        "sai2.exe" : "SAI 2",
-        "krita.exe" : "Krita",
-        "MediBangPaintPro.exe" : "MediBang",
-        "CLIPStudioPaint.exe" : "ClipStudio",
-        "blender.exe" : "Blender",
-        "Photoshop.exe" : "Photoshop",
-    ];
-    // Programs that can have varying executable names (ex. gimp<version>.exe)
-    string[string] regexPrograms = [
-        r"gimp(-\d+\.\d+)?\.exe" : "GIMP",
-    ];
+    // TODO : rewrite this mess
     Thread[GameProcess] workers;
 
     // A big regex to find all supported programs in one go
     string processNameRegex = r"((sai(2?))|(krita)|(MediBangPaintPro)|(CLIPStudioPaint)|(blender)|(Photoshop)|(gimp(-\d+\.\d+)?))\.exe";
     GameProcess gp = new GameProcess(processNameRegex, "", modules);
     Thread findThread = new Thread({
+        Thread.sleep(dur!"seconds"(1));
         gp.runOnProcess(false, true);
     });
     workers[gp] = findThread;
@@ -288,24 +285,7 @@ GameProcess findSai() {
         foreach (obj, worker; workers) {
             if (!worker.isRunning()) {
                 foundProgram = true;
-                foreach (exe, name; programs) {
-                    if (obj.getExeName() == exe) {
-                        errorText.text("Found "d ~ to!dstring(name));
-                        obj.setName(name);
-                        textText.text(to!dstring(name) ~ " Active: "d);
-                        result = obj;
-                        break;
-                    }
-                }
-                foreach (exe, name; regexPrograms) {
-                    if (matchFirst(obj.getExeName(), regex(exe))) {
-                        errorText.text("Found "d ~ to!dstring(name));
-                        obj.setName(name);
-                        textText.text(to!dstring(name) ~ " Active: "d);
-                        result = obj;
-                        break;
-                    }
-                }
+                result = gp;
                 window.update();
                 break;
             } else if (shutdown) {
@@ -342,6 +322,11 @@ void monitor() {
             // If a thread is already looking for a process, we want to let it run
             Thread.sleep(dur!"msecs"(15));
             continue;
+        }
+
+        if (sai is null || sai.processHandle is null) {
+            // Program search moved here to create less thread synchronization difficulties
+            lookForSai();
         }
 
         if (sai.processHandle !is null) {
