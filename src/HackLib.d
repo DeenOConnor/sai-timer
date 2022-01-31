@@ -5,18 +5,23 @@ module HackLib;
 pragma(lib, "advapi32");
 pragma(lib, "psapi");
 pragma(lib, "user32");
+pragma(lib, "wtsapi32");
 
-import core.sys.windows.windows;
-import core.sys.windows.winbase;
-import core.sys.windows.tlhelp32;
-import core.sys.windows.psapi;
-import core.stdc.string;
-import std.string;
 import std.conv;
 import std.stdio;
 import std.regex;
+import std.string;
+
 import core.thread;
 import core.time : dur;
+import core.stdc.string;
+
+import core.sys.windows.psapi;
+import core.sys.windows.tlhelp32;
+import core.sys.windows.winbase;
+import core.sys.windows.windows;
+import core.sys.windows.winuser;
+import core.sys.windows.wtsapi32;
 
 class GameProcess {
 
@@ -55,7 +60,7 @@ class GameProcess {
         this.programName = name;
     }
 
-    private uint findProcessByName(wstring procName, PROCESSENTRY32 pEntry) {
+    private uint findProcessByName(wstring procName) {
         PROCESSENTRY32 procEntry;
         procEntry.dwSize = PROCESSENTRY32.sizeof;
 
@@ -98,6 +103,61 @@ class GameProcess {
         return 0;
     }
 
+    // TODO : Clean up code
+    private uint findProcessByNameFast(wstring procName, bool nameIsRegex = false) {
+        WTS_PROCESS_INFOW* pBuf = null;
+        uint count = 0;
+
+        // This conversion is OK since we should deal with mostly english names
+        // And WTSEnumerateProcessesW doesn't work for some reason
+        string nameProcess = to!string(procName);
+
+        int result = WTSEnumerateProcessesW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pBuf, &count);
+
+        if (result == 0) {
+            uint error = GetLastError();
+            string errorMessage = "There was an error enumerating processes 0x" ~ to!string(error, 16);
+            MessageBoxA(null, errorMessage.ptr, "Error".ptr, 0);
+            if (result == 5) {
+                writeln("System reported NotEnoughPrivileges, please run the hack as administrator!");
+                readln();
+            }
+            return 0;
+        }
+
+        if (count == 0 || pBuf is null) {
+            return 0;
+        }
+
+        WTS_PROCESS_INFOW[] processInfos = pBuf[0..count].dup;
+
+        foreach (WTS_PROCESS_INFOW processInfo; processInfos) {
+            //wchar[] pName;
+            auto exereg = regex(r"\.exe"w);
+            wchar[] pProcName = processInfo.pProcessName[0..255].dup;
+			auto capt = matchFirst(pProcName, exereg);
+
+            wstring processName = to!wstring(capt.pre()) ~ ".exe"w;
+            if (processName.length > 255) {
+                processName = processName[0..255];
+            }
+            if (nameIsRegex) {
+                if (matchFirst(processName, regex(procName))) {
+                    this.processId = processInfo.ProcessId;
+                    this.setName(text(procName));
+                    return processInfo.ProcessId;
+                }
+            } else {
+                if (processName == procName) {
+                    this.processId = processInfo.ProcessId;
+                    return processInfo.ProcessId;
+                }
+            }
+        }
+
+        return 0;
+    }
+
     private static wstring findProcessNameByRegex(wstring regexp) {
         PROCESSENTRY32 procEntry;
         procEntry.dwSize = PROCESSENTRY32.sizeof;
@@ -135,6 +195,7 @@ class GameProcess {
         return ""w;
     }
 
+    // TODO : Can it be faster?
     private uint getThreadByProcess(uint processId) {
         THREADENTRY32 threadEntry;
         threadEntry.dwSize = THREADENTRY32.sizeof;
@@ -224,29 +285,51 @@ class GameProcess {
         }
     }
 
-    public void runOnProcess(bool needDebug = true, bool nameIsRegex = false) {
+    public void runOnProcess(bool needDebug = true, bool nameIsRegex = false, bool beFast = true) {
         if (needDebug) {
             this.setDebugPrivileges();
         }
 
-        if (nameIsRegex) {
-            wstring processName = "";
-            do {
-                processName = this.findProcessNameByRegex(this.targetProcessName);
-                Thread.sleep(dur!"msecs"(30));
-            } while (processName == ""w && !this.forceStop);
-            this.targetProcessName = processName;
-        }
+        // TODO : Clean up code
 
-        if (this.findProcessByName(this.targetProcessName, this.gameProcess) == 0) {
-            writeln("Waiting for the game to appear...");
+        if (beFast) {
+            if (nameIsRegex) {
+                if (this.findProcessByNameFast(this.targetProcessName, true) == 0) {
+                    writeln("Waiting for the game to appear...");
 
-            while (this.findProcessByName(this.targetProcessName, this.gameProcess) == 0 && !this.forceStop) {
-                Thread.sleep(dur!"msecs"(30));
+                    while (this.findProcessByNameFast(this.targetProcessName, true) == 0 && !this.forceStop) {
+                        Thread.sleep(dur!"msecs"(30));
+                    }
+                }
+            } else {
+                if (this.findProcessByNameFast(this.targetProcessName) == 0) {
+                    writeln("Waiting for the game to appear...");
+
+                    while (this.findProcessByNameFast(this.targetProcessName) == 0 && !this.forceStop) {
+                        Thread.sleep(dur!"msecs"(30));
+                    }
+                }
+            }
+        } else {
+            if (nameIsRegex) {
+                wstring processName = "";
+                do {
+                    processName = this.findProcessNameByRegex(this.targetProcessName);
+                    Thread.sleep(dur!"msecs"(30));
+                } while (processName == ""w && !this.forceStop);
+                this.targetProcessName = processName;
+            }
+
+            if (this.findProcessByName(this.targetProcessName) == 0) {
+                writeln("Waiting for the game to appear...");
+
+                while (this.findProcessByName(this.targetProcessName) == 0 && !this.forceStop) {
+                    Thread.sleep(dur!"msecs"(30));
+                }
             }
         }
 
-        while (this.getThreadByProcess(gameProcess.th32ProcessID) == 0 && !this.forceStop) {
+        while (this.getThreadByProcess(this.processId) == 0 && !this.forceStop) {
             Thread.sleep(dur!"msecs"(30));
         }
 
@@ -254,11 +337,15 @@ class GameProcess {
             return;
         }
 
-        this.processHandle = OpenProcess(PROCESS_ALL_ACCESS, false, gameProcess.th32ProcessID);
+        this.processHandle = OpenProcess(PROCESS_ALL_ACCESS, false, this.processId);
 
         foreach (string moduleName; this.processModules.byKey()) {
+            if (this.forceStop) {
+                return;
+            }
+
             ubyte* modPtr = null;
-            modPtr = this.getModuleNamePointer(moduleName, this.gameProcess.th32ProcessID);
+            modPtr = this.getModuleNamePointer(moduleName, this.processId);
             if (modPtr !is null) {
                 this.processModules[moduleName] = modPtr;
                 continue;
@@ -266,7 +353,7 @@ class GameProcess {
             this.processModules.remove(moduleName);
         }
 
-        if (this.targetWindowName != "") {
+        if (this.targetWindowName != "" && !this.forceStop) {
             this.updateWindow();
         }
     }
