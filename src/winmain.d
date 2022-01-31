@@ -251,6 +251,8 @@ void lookForSai() {
         isLookupThreadActive = true;
         sai = findSai();
         GC.collect();
+        errorText.text("Found "d ~ to!dstring(sai.programName));
+        textText.text(to!dstring(sai.programName) ~ " Active: "d);
         btnStartStop.enabled(true);
         btnReset.enabled(true);
         isLookupThreadActive = false;
