@@ -286,6 +286,31 @@ GameProcess findSai() {
             if (!worker.isRunning()) {
                 foundProgram = true;
                 result = gp;
+                switch (gp.programName) {
+                case "sai.exe":
+                    gp.setName("SAI");
+                    break;
+                case "sai2.exe":
+                    gp.setName("SAI 2");
+                    break;
+                case "krita.exe":
+                    gp.setName("Krita");
+                    break;
+                case "MediBangPaintPro.exe":
+                    gp.setName("MediBang");
+                    break;
+                case "CLIPStudioPaint.exe":
+                    gp.setName("ClipStudio");
+                    break;
+                case "blender.exe":
+                    gp.setName("Blender");
+                    break;
+                case "Photoshop.exe":
+                    gp.setName("Photoshop");
+                    break;
+                default:
+                    gp.setName("GIMP");
+                }
                 window.update();
                 break;
             } else if (shutdown) {
