@@ -108,10 +108,6 @@ class GameProcess {
         WTS_PROCESS_INFOW* pBuf = null;
         uint count = 0;
 
-        // This conversion is OK since we should deal with mostly english names
-        // And WTSEnumerateProcessesW doesn't work for some reason
-        string nameProcess = to!string(procName);
-
         int result = WTSEnumerateProcessesW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pBuf, &count);
 
         if (result == 0) {
@@ -132,7 +128,6 @@ class GameProcess {
         WTS_PROCESS_INFOW[] processInfos = pBuf[0..count].dup;
 
         foreach (WTS_PROCESS_INFOW processInfo; processInfos) {
-            //wchar[] pName;
             auto exereg = regex(r"\.exe"w);
             wchar[] pProcName = processInfo.pProcessName[0..255].dup;
 			auto capt = matchFirst(pProcName, exereg);
@@ -195,7 +190,6 @@ class GameProcess {
         return ""w;
     }
 
-    // TODO : Can it be faster?
     private uint getThreadByProcess(uint processId) {
         THREADENTRY32 threadEntry;
         threadEntry.dwSize = THREADENTRY32.sizeof;
@@ -289,8 +283,6 @@ class GameProcess {
         if (needDebug) {
             this.setDebugPrivileges();
         }
-
-        // TODO : Clean up code
 
         if (beFast) {
             if (nameIsRegex) {
